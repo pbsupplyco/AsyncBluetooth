@@ -7,7 +7,7 @@ import os.log
 
 /// An object that scans for, discovers, connects to, and manages peripherals using concurrency.
 public class CentralManager {
-    
+
     private typealias Utils = CentralManagerUtils
     
     fileprivate class DelegateWrapper: NSObject {
@@ -307,6 +307,30 @@ extension CentralManager.DelegateWrapper: CBCentralManagerDelegate {
     }
     
     func centralManager(
+        _ central: CBCentralManager,
+        didDisconnectPeripheral peripheral: CBPeripheral,
+        timestamp: CFAbsoluteTime,
+        isReconnecting: Bool,
+        error: Error?
+    ) {
+        Task {
+            do {
+                let result = CallbackUtils.result(for: (), error: error)
+                try await self.context.cancelPeripheralConnectionExecutor.setWorkCompletedForKey(
+                    peripheral.identifier, result: result
+                )
+                logger.info("Disconnected from \(peripheral.identifier)")
+            } catch {
+                logger.info("Disconnected from \(peripheral.identifier) without a continuation")
+            }
+            
+            self.context.eventSubject.send(
+                .didDisconnectPeripheral(peripheral: Peripheral(peripheral, logger: logger), isReconnecting: isReconnecting, error: error)
+            )
+        }
+    }
+    
+    func centralManager(
         _ cbCentralManager: CBCentralManager,
         didDisconnectPeripheral peripheral: CBPeripheral,
         error: Error?
@@ -323,7 +347,7 @@ extension CentralManager.DelegateWrapper: CBCentralManagerDelegate {
             }
             
             self.context.eventSubject.send(
-                .didDisconnectPeripheral(peripheral: Peripheral(peripheral, logger: logger), error: error)
+                .didDisconnectPeripheral(peripheral: Peripheral(peripheral, logger: logger), isReconnecting: false, error: error)
             )
         }
     }
